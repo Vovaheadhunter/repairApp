@@ -1,0 +1,29 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Система Ремонтных Заказов</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>Система Расчёта Ремонтных Работ</h1>
+        <nav>
+            <a href="#" onclick="loadContent('clients')">Клиенты</a>
+            <a href="#" onclick="loadContent('contractors')">Подрядчики</a>
+            <a href="#" onclick="loadContent('object_types')">Типы Объектов</a>
+            <a href="#" onclick="loadContent('objects')">Объекты</a>
+            <a href="#" onclick="loadContent('materials')">Материалы</a>
+            <a href="#" onclick="loadContent('orders')">Заказы</a>
+        </nav>
+    </header>
+
+
+    <main id="content">
+        <!-- Dynamic content will be injected here -->
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
