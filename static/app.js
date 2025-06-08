@@ -466,21 +466,25 @@ function openAddModal(entity) {
     `;
     document.body.appendChild(modal);
     document.getElementById(`${entity}-add-form`).onsubmit = function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        const payload = Object.fromEntries(formData);
-        fetch(`/api/${entity}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        }).then(() => {
-            alert("Запись добавлена");
-            document.body.removeChild(modal);
-            loadContent(entity);
-        }).catch(err => {
-            alert("Ошибка при сохранении: " + err);
-        });
-    };
+    e.preventDefault();
+    const formData = new FormData(this);
+    const payload = {};
+    for (const [key, value] of formData.entries()) {
+        if (key === "id") continue; // Exclude the 'id' field
+        payload[key] = value;
+    }
+    fetch(`/api/${entity}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    }).then(() => {
+        alert("Запись добавлена");
+        document.body.removeChild(modal);
+        loadContent(entity);
+    }).catch(err => {
+        alert("Ошибка при сохранении: " + err);
+    });
+};
 }
 
 // Open modal to edit entity

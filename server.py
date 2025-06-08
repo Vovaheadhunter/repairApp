@@ -231,27 +231,33 @@ async def read_index(request: Request):
 def create_entity(entity: str, request: dict):
     if entity not in ALLOWED_ENTITIES:
         raise HTTPException(status_code=400, detail=f"Invalid entity: {entity}")
+
     conn = None
     try:
         conn = get_db()
         cursor = conn.cursor()
+
+        # Remove 'id' from the request if it exists
+        request.pop("id", None)
+
         # Special handling for orders
         materials = {}
         if entity == "orders":
             raw_materials = request.pop("materials", {})
-            # Ensure all keys/values are valid integers
             for k, v in raw_materials.items():
                 try:
                     materials[int(k)] = int(v)
                 except (ValueError, TypeError):
                     print(f"Ignoring invalid material entry: {k}:{v}")
                     continue
+
         columns = ", ".join(request.keys())
         values = list(request.values())
         query = f"INSERT INTO {entity} ({columns}) VALUES ({', '.join(['%s'] * len(values))}) RETURNING id"
         cursor.execute(query, values)
         item_id = cursor.fetchone()[0]
         conn.commit()
+
         # Handle materials only for orders
         if entity == "orders":
             conn2 = get_db()
@@ -264,6 +270,7 @@ def create_entity(entity: str, request: dict):
             conn2.commit()
             cursor2.close()
             conn2.close()
+
         return {"status": "created", "id": item_id}
     except Exception as e:
         print("Server error:", str(e))
