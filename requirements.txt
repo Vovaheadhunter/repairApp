@@ -1,1 +1,5 @@
 fastapi[all]
+uvicorn[all]
+psycopg2[all]
+asyncpg[all]
+pydantic[all]

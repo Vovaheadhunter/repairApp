@@ -1,0 +1,186 @@
+-- Drop and create database
+DROP DATABASE IF EXISTS repair_app;
+CREATE DATABASE repair_app;
+\c repair_app;
+
+-- Create tables
+CREATE TABLE clients (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    phone VARCHAR(255)
+);
+
+CREATE TABLE contractors (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    specialization VARCHAR(255),
+    phone VARCHAR(255)
+);
+
+CREATE TABLE object_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    cost_per_sqm FLOAT
+);
+
+CREATE TABLE objects (
+    id SERIAL PRIMARY KEY,
+    address VARCHAR(255),
+    object_type_id INT REFERENCES object_types(id),
+    area FLOAT
+);
+
+CREATE TABLE materials (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    cost_per_unit FLOAT
+);
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    client_id INT REFERENCES clients(id),
+    object_id INT REFERENCES objects(id),
+    contractor_id INT REFERENCES contractors(id),
+    status VARCHAR(50),
+    total_cost DECIMAL(10, 2) DEFAULT 0.00
+);
+
+CREATE TABLE materials_in_order (
+    materials_id INT REFERENCES materials(id),
+    order_id INT REFERENCES orders(id),
+    count INT,
+    PRIMARY KEY (materials_id, order_id)
+);
+
+-- Insert Clients
+INSERT INTO clients (id, name, phone) VALUES
+(1, 'Иван Петров', '+79123456789'),
+(2, 'Сидорова Анна', '+79211234567'),
+(3, 'ООО ''Городские проекты''', '+74951234567'),
+(4, 'Кузнецова Елена', '+79637894521');
+
+-- Insert Contractors
+INSERT INTO contractors (id, name, specialization, phone) VALUES
+(1, 'ООО ''РемСтройПроект''', 'Комплексный ремонт', '+74959876543'),
+(2, 'ИП Николаев В.В.', 'Электромонтажные работы', '+79261234567'),
+(3, 'СтройМастер', 'Сантехнические работы', '+79169876543'),
+(4, 'Дизайн-студия ''Арт-Деко''', 'Отделочные работы', '+74991234567');
+
+-- Insert Object Types
+INSERT INTO object_types (id, name, cost_per_sqm) VALUES
+(1, 'Квартира', 5000.00),
+(2, 'Частный дом', 7500.00),
+(3, 'Офис', 6000.00),
+(4, 'Коммерческое помещение', 8000.00);
+
+-- Insert Objects
+INSERT INTO objects (id, address, object_type_id, area) VALUES
+(1, 'ул. Ленина, 15 кв. 23', 1, 62.50),
+(2, 'пр-т Мира, 88 офис 404', 3, 120.00),
+(3, 'п. Озерный, ул. Центральная 12', 2, 150.70),
+(4, 'ул. Пушкина, 10', 4, 200.30);
+
+-- Insert Materials
+INSERT INTO materials (id, name, cost_per_unit) VALUES
+(1, 'Краска интерьерная (л)', 250.00),
+(2, 'Обои флизелиновые (рулон)', 450.00),
+(3, 'Ламинат 33 класса (м²)', 650.00),
+(4, 'Плитка керамическая (м²)', 900.00),
+(5, 'Гипсокартон (лист)', 320.00),
+(6, 'Сантехнический комплект', 15000.00),
+(7, 'LED-светильники (шт)', 890.00);
+
+-- Insert Orders
+INSERT INTO orders (id, client_id, object_id, contractor_id, status) VALUES
+(1, 1, 1, 1, 'Новый'),
+(2, 2, 2, 4, 'В работе'),
+(3, 3, 3, 2, 'Завершен'),
+(4, 4, 4, 3, 'Новый');
+
+-- 🔧 Function: CalculateOrderCost
+CREATE OR REPLACE FUNCTION CalculateOrderCost(order_id INT)
+RETURNS DECIMAL(10,2)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    work_cost DECIMAL(10,2) := 0.00;
+    materials_cost DECIMAL(10,2) := 0.00;
+BEGIN
+    -- Work cost = area * cost_per_sqm
+    SELECT o.area * t.cost_per_sqm INTO work_cost
+    FROM orders ord
+    JOIN objects o ON ord.object_id = o.id
+    JOIN object_types t ON o.object_type_id = t.id
+    WHERE ord.id = order_id;
+
+    -- Materials cost = sum(material cost * quantity)
+    SELECT COALESCE(SUM(m.cost_per_unit * mio.count), 0) INTO materials_cost
+    FROM materials_in_order mio
+    JOIN materials m ON mio.materials_id = m.id
+    WHERE mio.order_id = order_id;
+
+    RETURN work_cost + materials_cost;
+END;
+$$;
+
+-- 🔄 Trigger: After material insert/update/delete
+CREATE OR REPLACE FUNCTION update_order_total_cost()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE orders
+    SET total_cost = CalculateOrderCost(NEW.order_id)
+    WHERE id = NEW.order_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_order_material()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE orders
+    SET total_cost = CalculateOrderCost(OLD.order_id)
+    WHERE id = OLD.order_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_materials_in_order_insert
+AFTER INSERT ON materials_in_order
+FOR EACH ROW
+EXECUTE FUNCTION update_order_total_cost();
+
+CREATE TRIGGER after_materials_in_order_update
+AFTER UPDATE ON materials_in_order
+FOR EACH ROW
+WHEN (OLD.count IS DISTINCT FROM NEW.count OR OLD.materials_id IS DISTINCT FROM NEW.materials_id)
+EXECUTE FUNCTION update_order_total_cost();
+
+CREATE TRIGGER after_materials_in_order_delete
+AFTER DELETE ON materials_in_order
+FOR EACH ROW
+EXECUTE FUNCTION delete_order_material();
+
+-- Insert Material-Order Relationships
+INSERT INTO materials_in_order (materials_id, order_id, count) VALUES
+-- Order 1
+(1, 1, 10),
+(2, 1, 8),
+(5, 1, 15),
+-- Order 2
+(3, 2, 120),
+(4, 2, 80),
+(7, 2, 25),
+-- Order 3
+(6, 3, 3),
+(5, 3, 20),
+(1, 3, 5),
+-- Order 4
+(4, 4, 150),
+(7, 4, 30),
+(3, 4, 100);
+
+-- Verify data
+SELECT * FROM orders;
+
+-- Describe materials_in_order
+\d materials_in_order;
