@@ -256,6 +256,7 @@ def create_entity(entity: str, request: dict):
         query = f"INSERT INTO {entity} ({columns}) VALUES ({', '.join(['%s'] * len(values))}) RETURNING id"
         cursor.execute(query, values)
         item_id = cursor.fetchone()[0]
+        # print(item_id)
         conn.commit()
 
         # Handle materials only for orders

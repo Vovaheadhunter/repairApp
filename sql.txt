@@ -1,7 +1,11 @@
 -- Drop and create database
-DROP DATABASE IF EXISTS repair_app;
-CREATE DATABASE repair_app;
-\c repair_app;
+drop table if exists materials_in_order;
+drop table if exists orders;
+drop table if exists clients;
+drop table if exists contractors;
+drop table if exists objects;
+drop table if exists object_types;
+drop table if exists materials;
 
 -- Create tables
 CREATE TABLE clients (
@@ -97,33 +101,35 @@ INSERT INTO orders (id, client_id, object_id, contractor_id, status) VALUES
 (3, 3, 3, 2, 'Завершен'),
 (4, 4, 4, 3, 'Новый');
 
--- 🔧 Function: CalculateOrderCost
-CREATE OR REPLACE FUNCTION CalculateOrderCost(order_id INT)
-RETURNS DECIMAL(10,2)
+DROP FUNCTION IF EXISTS calculateordercost(integer);
+
+CREATE OR REPLACE FUNCTION CalculateOrderCost(order_id_param INT)
+RETURNS DECIMAL(10, 2)
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    work_cost DECIMAL(10,2) := 0.00;
-    materials_cost DECIMAL(10,2) := 0.00;
+    work_cost DECIMAL(10, 2) := 0.00;
+    materials_cost DECIMAL(10, 2) := 0.00;
 BEGIN
     -- Work cost = area * cost_per_sqm
     SELECT o.area * t.cost_per_sqm INTO work_cost
     FROM orders ord
     JOIN objects o ON ord.object_id = o.id
     JOIN object_types t ON o.object_type_id = t.id
-    WHERE ord.id = order_id;
+    WHERE ord.id = order_id_param;
 
     -- Materials cost = sum(material cost * quantity)
     SELECT COALESCE(SUM(m.cost_per_unit * mio.count), 0) INTO materials_cost
     FROM materials_in_order mio
     JOIN materials m ON mio.materials_id = m.id
-    WHERE mio.order_id = order_id;
+    WHERE mio.order_id = order_id_param;
 
     RETURN work_cost + materials_cost;
 END;
 $$;
 
--- 🔄 Trigger: After material insert/update/delete
+DROP FUNCTION IF EXISTS update_order_total_cost;
+
 CREATE OR REPLACE FUNCTION update_order_total_cost()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -133,6 +139,8 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP FUNCTION IF EXISTS delete_order_material;
 
 CREATE OR REPLACE FUNCTION delete_order_material()
 RETURNS TRIGGER AS $$
@@ -182,5 +190,11 @@ INSERT INTO materials_in_order (materials_id, order_id, count) VALUES
 -- Verify data
 SELECT * FROM orders;
 
--- Describe materials_in_order
-\d materials_in_order;
+select * from materials_in_order;
+
+SELECT setval('clients_id_seq', (SELECT MAX(id) FROM clients));
+SELECT setval('contractors_id_seq', (SELECT MAX(id) FROM contractors));
+SELECT setval('object_types_id_seq', (SELECT MAX(id) FROM object_types));
+SELECT setval('objects_id_seq', (SELECT MAX(id) FROM objects));
+SELECT setval('materials_id_seq', (SELECT MAX(id) FROM materials));
+SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders));
